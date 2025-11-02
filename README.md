@@ -36,7 +36,7 @@ cd PS2Base
 ### Basic Usage
 1. Compile the project in Visual Studio
 2. The resulting DLL will be in `x64/Debug/` or `x64/Release/`
-3. Bypass the Anticheat - Follow this guide here: https://www.unknowncheats.me/forum/planetside-2-a/712951-planetside-2-anticheat-battleye-bypass-braidead-edition.html
+3. Bypass the Anticheat - Follow this guide here: [link](https://www.unknowncheats.me/forum/planetside-2-a/712951-planetside-2-anticheat-battleye-bypass-braidead-edition.html)
 4. Start the game and Inject with Cheatengine or any other Injector
 
 ### Configuration
