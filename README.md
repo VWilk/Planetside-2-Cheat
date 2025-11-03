@@ -1,4 +1,4 @@
-# PS2Base - PlanetSide 2 DX11 Internal Framework
+# Planetside 2 Cheat - PS2Base - PlanetSide 2 DX11 Internal Framework
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Visual Studio](https://img.shields.io/badge/IDE-Visual%20Studio-blue.svg)](https://visualstudio.microsoft.com/)
@@ -31,44 +31,13 @@ cd PS2Base
 
 4. Build the solution (Ctrl+Shift+B)
 
-## 📁 Project Structure
-
-```
-PS2Base/
-├── Internal DX11 Base/          # Main project directory
-│   ├── Core/                   # Core engine components
-│   │   ├── Engine.h/cpp        # Main engine class
-│   │   ├── Main.cpp            # Entry point and thread management
-│   │   └── dllmain.cpp         # DLL entry point
-│   ├── Game/                   # Game-specific components
-│   │   ├── SDK.h               # Game structures and enums
-│   │   ├── Offsets.h           # Memory offsets
-│   │   ├── GameData.h          # Data structures
-│   │   └── Game.h/cpp          # Game state management
-│   ├── Features/               # Feature implementations
-│   │   ├── ESP.h/cpp           # Visual features
-│   │   ├── Aimbot.h/cpp        # Targeting system
-│   │   ├── MagicBullet.h/cpp   # Bullet manipulation
-│   │   └── TargetManager.h/cpp # Target selection
-│   ├── Renderer/               # Rendering system
-│   │   └── Renderer.h/cpp      # DirectX 11 wrapper
-│   ├── Utils/                  # Utility classes
-│   │   ├── Vector.h            # Vector mathematics
-│   │   ├── Settings.h          # Configuration
-│   │   └── Logger.h/cpp        # Logging system
-│   └── Framework/             # Third-party libraries
-│       └── ImGui/              # UI framework
-├── docs/                       # Documentation
-├── examples/                   # Usage examples
-└── research/                   # Research materials
-```
-
 ## 🎯 Usage
 
 ### Basic Usage
 1. Compile the project in Visual Studio
 2. The resulting DLL will be in `x64/Debug/` or `x64/Release/`
-3. Use appropriate injection methods (not covered in this documentation)
+3. Bypass the Anticheat - Follow this guide here: [Click Me!](https://www.unknowncheats.me/forum/planetside-2-a/712951-planetside-2-anticheat-battleye-bypass-braidead-edition.html)
+4. Start the game and Inject with Cheatengine or any other Injector
 
 ### Configuration
 - Press **INSERT** to toggle the menu
