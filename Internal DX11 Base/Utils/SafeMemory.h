@@ -14,7 +14,8 @@ namespace Utils
         SafeMemory();
         ~SafeMemory();
         
-        bool AttachToProcess(const std::string& processName);
+        // Attaches to current process (processName parameter is ignored since we're injected)
+        bool AttachToProcess(const std::string& processName = "");
         void DetachFromProcess();
         
         template<typename T>

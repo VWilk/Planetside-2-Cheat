@@ -12,7 +12,8 @@
 namespace DX11Base
 {
 	// Static variables
-    std::string CrashDump::s_targetProcessName = "Planetside2_x64.exe";
+    // s_targetProcessName is no longer used - we use GetCurrentProcess() instead
+    std::string CrashDump::s_targetProcessName = "";  // Deprecated, kept for SetTargetProcessName() compatibility
     std::string CrashDump::s_dumpDirectory = "CrashDumps";
     bool CrashDump::s_autoCrashDetection = true;
     HANDLE CrashDump::s_targetProcessHandle = nullptr;
@@ -22,76 +23,93 @@ namespace DX11Base
     {
         Logger::Log("Initializing CrashDump system...");
         
-        // Find target process
-        if (IsTargetProcessRunning())
-        {
-            Logger::Log("Target process %s found with PID: %d", s_targetProcessName.c_str(), s_targetProcessId);
-        }
-        else
-        {
-            Logger::Warning("Target process %s not found. Will monitor for it.", s_targetProcessName.c_str());
-        }
+        PVOID vehHandler = nullptr;
         
-        // Create dump directory
-        if (CreateDirectoryIfNotExists(s_dumpDirectory))
-        {
-            Logger::Log("CrashDump directory created/verified: %s", s_dumpDirectory.c_str());
-        }
-        else
-        {
-            Logger::Error("Failed to create CrashDump directory: %s", s_dumpDirectory.c_str());
-        }
-        
-        // Set unhandled exception filter
-        SetUnhandledExceptionFilter(UnhandledExceptionFilter);
-        
-        // Vectored Exception Handler for better crash detection
-        PVOID vehHandler = AddVectoredExceptionHandler(1, [](PEXCEPTION_POINTERS pExceptionInfo) -> LONG
-        {
-            // Enhanced exception detection
-            DWORD exceptionCode = pExceptionInfo->ExceptionRecord->ExceptionCode;
-            
-            if (exceptionCode == EXCEPTION_ACCESS_VIOLATION ||
-                exceptionCode == EXCEPTION_STACK_OVERFLOW ||
-                exceptionCode == EXCEPTION_INT_DIVIDE_BY_ZERO ||
-                exceptionCode == EXCEPTION_BREAKPOINT)
+        try {
+            // Initialize target process handle (current process since we're injected)
+            if (IsTargetProcessRunning())
             {
-                Logger::Error("Critical exception detected! Code: 0x%08X, Address: 0x%p", 
-                             exceptionCode, pExceptionInfo->ExceptionRecord->ExceptionAddress);
+                Logger::Log("Target process initialized with PID: %d", s_targetProcessId);
+            }
+            else
+            {
+                Logger::Warning("Failed to initialize target process handle");
+            }
+            
+            // Create dump directory
+            if (CreateDirectoryIfNotExists(s_dumpDirectory))
+            {
+                Logger::Log("CrashDump directory created/verified: %s", s_dumpDirectory.c_str());
+            }
+            else
+            {
+                Logger::Warning("Failed to create CrashDump directory: %s (will continue anyway)", s_dumpDirectory.c_str());
+            }
+            
+            // Always set unhandled exception filter (works on all Windows versions)
+            LPTOP_LEVEL_EXCEPTION_FILTER oldFilter = SetUnhandledExceptionFilter(UnhandledExceptionFilter);
+            if (oldFilter) {
+                Logger::Log("Unhandled exception filter set (replaced existing filter)");
+            }
+            else {
+                Logger::Log("Unhandled exception filter set");
+            }
+            
+            // Try to add Vectored Exception Handler (Windows XP+)
+            // This provides better crash detection but may not be available on very old systems
+            typedef PVOID (WINAPI* AddVectoredExceptionHandlerProc)(ULONG, PVOID);
+            typedef ULONG (WINAPI* RemoveVectoredExceptionHandlerProc)(PVOID);
+            
+            HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
+            if (hKernel32) {
+                AddVectoredExceptionHandlerProc pAddVectored = 
+                    (AddVectoredExceptionHandlerProc)GetProcAddress(hKernel32, "AddVectoredExceptionHandler");
                 
-                // Check if exception is in our DLL
-                HMODULE hOurDLL = GetModuleHandleA("Internal DX11 Base.dll");
-                if (hOurDLL)
-                {
-                    MODULEINFO modInfo;
-                    if (GetModuleInformation(GetCurrentProcess(), hOurDLL, &modInfo, sizeof(modInfo)))
-                    {
-                        PVOID exceptionAddr = pExceptionInfo->ExceptionRecord->ExceptionAddress;
-                        if (exceptionAddr >= modInfo.lpBaseOfDll && 
-                            exceptionAddr < (char*)modInfo.lpBaseOfDll + modInfo.SizeOfImage)
-                        {
-                            Logger::Error("⚠ EXCEPTION IN OUR DLL! This is likely our fault!");
-                            CreateCrashDump("DLL Internal Exception");
+                if (pAddVectored) {
+                    // VectoredExceptionHandler is available (Windows XP+)
+                    try {
+                        // Use static function instead of lambda - cast function pointer to PVOID
+                        vehHandler = pAddVectored(1, reinterpret_cast<PVOID>(&VectoredExceptionHandler));
+                        
+                        if (vehHandler) {
+                            Logger::Log("Vectored Exception Handler registered successfully");
                         }
-                        else
-                        {
-                            Logger::Error("Exception in external code, analyzing...");
-                            CreateCrashDump("External Exception");
+                        else {
+                            Logger::Warning("AddVectoredExceptionHandler returned NULL (may be disabled)");
                         }
                     }
+                    catch (...) {
+                        Logger::Warning("Exception while registering VectoredExceptionHandler, using fallback only");
+                        vehHandler = nullptr;
+                    }
                 }
-                else
-                {
-                    Logger::Error("Our DLL not found during exception!");
-                    CreateCrashDump("DLL Missing Exception");
+                else {
+                    // AddVectoredExceptionHandler not available (very old Windows)
+                    Logger::Log("VectoredExceptionHandler not available (old Windows version), using UnhandledExceptionFilter only");
                 }
-                
-                return EXCEPTION_EXECUTE_HANDLER;
             }
-            return EXCEPTION_CONTINUE_SEARCH;
-        });
+            else {
+                Logger::Warning("kernel32.dll not found (should never happen), using UnhandledExceptionFilter only");
+            }
+            
+            if (vehHandler) {
+                Logger::Log("CrashDump system initialized successfully (with VectoredExceptionHandler)");
+            }
+            else {
+                Logger::Log("CrashDump system initialized successfully (UnhandledExceptionFilter only)");
+            }
+        }
+        catch (const std::exception& e) {
+            Logger::Error("Exception in CrashDump::Initialize: %s", e.what());
+            // Still try to set unhandled exception filter as last resort
+            SetUnhandledExceptionFilter(UnhandledExceptionFilter);
+        }
+        catch (...) {
+            Logger::Error("Unknown exception in CrashDump::Initialize");
+            // Still try to set unhandled exception filter as last resort
+            SetUnhandledExceptionFilter(UnhandledExceptionFilter);
+        }
         
-        Logger::Log("CrashDump system initialized successfully!");
         return vehHandler;
     }
 
@@ -199,35 +217,73 @@ namespace DX11Base
         return EXCEPTION_EXECUTE_HANDLER;
     }
 
+    LONG WINAPI CrashDump::VectoredExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
+    {
+        // Enhanced exception detection
+        DWORD exceptionCode = pExceptionInfo->ExceptionRecord->ExceptionCode;
+        
+        if (exceptionCode == EXCEPTION_ACCESS_VIOLATION ||
+            exceptionCode == EXCEPTION_STACK_OVERFLOW ||
+            exceptionCode == EXCEPTION_INT_DIVIDE_BY_ZERO ||
+            exceptionCode == EXCEPTION_BREAKPOINT)
+        {
+            try {
+                Logger::Error("Critical exception detected! Code: 0x%08X, Address: 0x%p", 
+                             exceptionCode, pExceptionInfo->ExceptionRecord->ExceptionAddress);
+                
+                // Check if exception is in our DLL
+                HMODULE hOurDLL = GetModuleHandleA("Internal DX11 Base.dll");
+                if (hOurDLL)
+                {
+                    MODULEINFO modInfo;
+                    if (GetModuleInformation(GetCurrentProcess(), hOurDLL, &modInfo, sizeof(modInfo)))
+                    {
+                        PVOID exceptionAddr = pExceptionInfo->ExceptionRecord->ExceptionAddress;
+                        if (exceptionAddr >= modInfo.lpBaseOfDll && 
+                            exceptionAddr < (char*)modInfo.lpBaseOfDll + modInfo.SizeOfImage)
+                        {
+                            Logger::Error("⚠ EXCEPTION IN OUR DLL! This is likely our fault!");
+                            CreateCrashDump("DLL Internal Exception");
+                        }
+                        else
+                        {
+                            Logger::Error("Exception in external code, analyzing...");
+                            CreateCrashDump("External Exception");
+                        }
+                    }
+                }
+                else
+                {
+                    Logger::Error("Our DLL not found during exception!");
+                    CreateCrashDump("DLL Missing Exception");
+                }
+            }
+            catch (...) {
+                // If logging fails during exception, at least try to create dump
+                CreateCrashDump("Exception during VEH handler");
+            }
+            
+            return EXCEPTION_EXECUTE_HANDLER;
+        }
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
     bool CrashDump::IsTargetProcessRunning()
     {
-        HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if (hSnapshot == INVALID_HANDLE_VALUE)
-        {
-            return false;
-        }
+        // Since we're injected into the target process, use GetCurrentProcess()
+        s_targetProcessId = GetCurrentProcessId();
+        s_targetProcessHandle = GetCurrentProcess();
         
-        PROCESSENTRY32 pe32;
-        pe32.dwSize = sizeof(PROCESSENTRY32);
-        
-        if (Process32First(hSnapshot, &pe32))
+        if (s_targetProcessHandle != nullptr)
         {
-            do
+            // Verify process is still running by checking exit code
+            DWORD exitCode;
+            if (GetExitCodeProcess(s_targetProcessHandle, &exitCode))
             {
-                // Convert WCHAR to char for comparison
-                char processName[260];
-                WideCharToMultiByte(CP_ACP, 0, pe32.szExeFile, -1, processName, sizeof(processName), NULL, NULL);
-                if (_stricmp(processName, s_targetProcessName.c_str()) == 0)
-                {
-                    s_targetProcessId = pe32.th32ProcessID;
-                    s_targetProcessHandle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, s_targetProcessId);
-                    CloseHandle(hSnapshot);
-                    return true;
-                }
-            } while (Process32Next(hSnapshot, &pe32));
+                return exitCode == STILL_ACTIVE;
+            }
         }
         
-        CloseHandle(hSnapshot);
         return false;
     }
 
@@ -289,8 +345,10 @@ namespace DX11Base
 
     void CrashDump::SetTargetProcessName(const std::string& processName)
     {
+        // Deprecated: Process name is no longer used, we use GetCurrentProcess() instead
+        // Kept for backwards compatibility
         s_targetProcessName = processName;
-        Logger::Log("Target process name set to: %s", processName.c_str());
+        Logger::Log("SetTargetProcessName called with: %s (ignored - using GetCurrentProcess() instead)", processName.c_str());
     }
 
     void CrashDump::SetAutoCrashDetection(bool enabled)
@@ -315,7 +373,23 @@ namespace DX11Base
     std::string CrashDump::GetDumpFileName(const std::string& reason)
     {
         std::string timestamp = GetCurrentDateTimeString();
-        std::string filename = s_dumpDirectory + "\\" + s_targetProcessName + "_" + 
+        
+        // Get current process name dynamically
+        char processName[MAX_PATH] = {0};
+        char defaultName[] = "Process";
+        char* fileName = defaultName;
+        if (GetModuleFileNameA(nullptr, processName, MAX_PATH))
+        {
+            // Extract just the filename
+            char* found = strrchr(processName, '\\');
+            if (found)
+                fileName = found + 1;
+            else
+                fileName = processName;
+        }
+        // else: fileName already points to defaultName
+        
+        std::string filename = s_dumpDirectory + "\\" + std::string(fileName) + "_" + 
                               timestamp + "_" + reason + ".dmp";
         
         // Remove invalid characters from filename
@@ -356,7 +430,17 @@ namespace DX11Base
         {
             std::string logContent = "=== ENHANCED CRASH DUMP INFORMATION ===\n";
             logContent += "Timestamp: " + GetCurrentDateTimeString() + "\n";
-            logContent += "Target Process: " + s_targetProcessName + "\n";
+            
+            // Get current process name dynamically
+            char processName[MAX_PATH] = {0};
+            if (GetModuleFileNameA(nullptr, processName, MAX_PATH))
+            {
+                logContent += "Target Process: " + std::string(processName) + "\n";
+            }
+            else
+            {
+                logContent += "Target Process: Unknown\n";
+            }
             logContent += "Process ID: " + std::to_string(GetCurrentProcessId()) + "\n";
             logContent += "Thread ID: " + std::to_string(GetCurrentThreadId()) + "\n";
             logContent += "Reason: " + reason + "\n";

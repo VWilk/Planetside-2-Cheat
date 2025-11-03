@@ -13,8 +13,8 @@ namespace DX11Base
         ProcessMonitor();
         ~ProcessMonitor();
         
-        // Starts monitoring of target process
-        void StartMonitoring(const std::string& processName);
+        // Starts monitoring of current process (the process this DLL is injected into)
+        void StartMonitoring();
         
         // Stops monitoring
         void StopMonitoring();
@@ -29,7 +29,6 @@ namespace DX11Base
         void SetCrashCallback(std::function<void()> callback);
         
     private:
-        std::string m_processName;
         DWORD m_processId;
         HANDLE m_processHandle;
         std::atomic<bool> m_monitoring;
@@ -40,8 +39,8 @@ namespace DX11Base
         // Thread function for monitoring
         void MonitorThread();
         
-        // Finds process and opens handle
-        bool FindAndOpenProcess();
+        // Initializes process handle using GetCurrentProcess()
+        bool InitializeProcessHandle();
         
         // Monitors process status
         void CheckProcessStatus();

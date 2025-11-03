@@ -31,11 +31,10 @@ namespace Offsets {
         constexpr uintptr_t Position = 0x920;        ///< Entity position offset
         constexpr uintptr_t TeamID = 0x1E8;         ///< Team ID offset
         constexpr uintptr_t Type = 0x5E0;           ///< Entity type offset
-        constexpr uintptr_t PlayerStance = 0x2A00;  ///< Player stance offset
+        constexpr uintptr_t PlayerStance = 0x2A04;  ///< Player stance offset
         constexpr uintptr_t ViewAngle = 0x2C20;     ///< View angle offset
         constexpr uintptr_t Name = 0x2AF8;          ///< Entity name offset
         constexpr uintptr_t NameBackup = 0x2B48;    ///< Backup name offset
-        constexpr uintptr_t PlayerBase = 0x3B0;     ///< Player base offset
         
         // Health/Shield (Pointer indirection!)
         constexpr uintptr_t PointerToHealthAndShield = 0x120;

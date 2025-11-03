@@ -20,6 +20,9 @@ namespace DX11Base
         // Exception handler for unhandled exceptions
         static LONG WINAPI UnhandledExceptionFilter(EXCEPTION_POINTERS* pExceptionInfo);
         
+        // Vectored exception handler (Windows XP+)
+        static LONG WINAPI VectoredExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo);
+        
         // Checks if target process (PlanetSide 2) is still running
         static bool IsTargetProcessRunning();
         

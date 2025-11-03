@@ -19,7 +19,7 @@ namespace DX11Base
         StopMonitoring();
     }
 
-    void ProcessMonitor::StartMonitoring(const std::string& processName)
+    void ProcessMonitor::StartMonitoring()
     {
         if (m_monitoring.load())
         {
@@ -27,23 +27,17 @@ namespace DX11Base
             return;
         }
         
-        m_processName = processName;
         m_shouldStop = false;
         
-        if (FindAndOpenProcess())
+        if (InitializeProcessHandle())
         {
             m_monitoring = true;
             m_monitorThread = std::thread(&ProcessMonitor::MonitorThread, this);
-            Logger::Log("Started monitoring process: %s (PID: %d)", 
-                       m_processName.c_str(), m_processId);
+            Logger::Log("Started monitoring current process (PID: %d)", m_processId);
         }
         else
         {
-            Logger::Warning("Target process not found: %s. Will retry periodically.", 
-                           m_processName.c_str());
-            // Still start monitor thread to wait for process
-            m_monitoring = true;
-            m_monitorThread = std::thread(&ProcessMonitor::MonitorThread, this);
+            Logger::Error("Failed to initialize process handle for monitoring");
         }
     }
 
@@ -59,14 +53,12 @@ namespace DX11Base
             m_monitorThread.join();
         }
         
-        if (m_processHandle)
-        {
-            CloseHandle(m_processHandle);
-            m_processHandle = nullptr;
-        }
+        // Note: Don't close GetCurrentProcess() handle - it's a pseudo-handle
+        // Just reset our reference
+        m_processHandle = nullptr;
         
         m_monitoring = false;
-        Logger::Log("Stopped monitoring process: %s", m_processName.c_str());
+        Logger::Log("Stopped monitoring process (PID: %d)", m_processId);
     }
 
     bool ProcessMonitor::IsProcessRunning()
@@ -90,7 +82,7 @@ namespace DX11Base
 
     void ProcessMonitor::MonitorThread()
     {
-        Logger::Log("Process monitor thread started for: %s", m_processName.c_str());
+        Logger::Log("Process monitor thread started for current process (PID: %d)", m_processId);
         
         while (!m_shouldStop.load())
         {
@@ -112,58 +104,32 @@ namespace DX11Base
         Logger::Log("Process monitor thread stopped");
     }
 
-    bool ProcessMonitor::FindAndOpenProcess()
+    bool ProcessMonitor::InitializeProcessHandle()
     {
-        HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if (hSnapshot == INVALID_HANDLE_VALUE)
+        // Use GetCurrentProcess() since we're injected into the target process
+        m_processId = GetCurrentProcessId();
+        m_processHandle = GetCurrentProcess();
+        
+        if (m_processHandle != nullptr)
         {
-            Logger::Error("Failed to create process snapshot. Error: %d", GetLastError());
+            Logger::Log("Initialized process handle for current process (PID: %d)", m_processId);
+            return true;
+        }
+        else
+        {
+            Logger::Error("Failed to get current process handle. Error: %d", GetLastError());
             return false;
         }
-        
-        PROCESSENTRY32 pe32;
-        pe32.dwSize = sizeof(PROCESSENTRY32);
-        
-        bool found = false;
-        if (Process32First(hSnapshot, &pe32))
-        {
-            do
-            {
-                // Convert WCHAR to char for comparison
-                char processName[260];
-                WideCharToMultiByte(CP_ACP, 0, pe32.szExeFile, -1, processName, sizeof(processName), NULL, NULL);
-                if (_stricmp(processName, m_processName.c_str()) == 0)
-                {
-                    m_processId = pe32.th32ProcessID;
-                    m_processHandle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 
-                                                 FALSE, m_processId);
-                    if (m_processHandle)
-                    {
-                        found = true;
-                        Logger::Log("Found and opened process: %s (PID: %d)", 
-                                   m_processName.c_str(), m_processId);
-                    }
-                    else
-                    {
-                        Logger::Error("Failed to open process handle. Error: %d", GetLastError());
-                    }
-                    break;
-                }
-            } while (Process32Next(hSnapshot, &pe32));
-        }
-        
-        CloseHandle(hSnapshot);
-        return found;
     }
 
     void ProcessMonitor::CheckProcessStatus()
     {
-        // If we still have no handle, try to find the process
+        // If we still have no handle, reinitialize it
         if (!m_processHandle)
         {
-            if (FindAndOpenProcess())
+            if (InitializeProcessHandle())
             {
-                Logger::Log("Target process found and monitoring started: %s", m_processName.c_str());
+                Logger::Log("Process handle reinitialized (PID: %d)", m_processId);
             }
             return;
         }
@@ -171,22 +137,32 @@ namespace DX11Base
         // Check if process is still running
         if (!IsProcessRunning())
         {
-            Logger::Error("Target process has crashed or terminated: %s (PID: %d)", 
-                         m_processName.c_str(), m_processId);
+            Logger::Error("Target process has crashed or terminated (PID: %d)", m_processId);
             
             // Create crash dump
-            std::string dumpPath = "CrashDumps\\" + m_processName + "_" + 
-                                  CrashDump::GetCurrentDateTimeStringPublic() + "_ProcessTerminated.dmp";
-            
-            // Try to create a dump of the terminated process
-            // (only works if process is still in memory)
-            if (CrashDump::CreateProcessDump(m_processId, dumpPath))
+            char processName[MAX_PATH] = {0};
+            if (GetModuleFileNameA(nullptr, processName, MAX_PATH))
             {
-                Logger::Log("Process dump created: %s", dumpPath.c_str());
-            }
-            else
-            {
-                Logger::Warning("Could not create process dump - process may have already been cleaned up");
+                // Extract just the filename
+                char* fileName = strrchr(processName, '\\');
+                if (fileName)
+                    fileName++;
+                else
+                    fileName = processName;
+                
+                std::string dumpPath = "CrashDumps\\" + std::string(fileName) + "_" + 
+                                      CrashDump::GetCurrentDateTimeStringPublic() + "_ProcessTerminated.dmp";
+                
+                // Try to create a dump of the terminated process
+                // (only works if process is still in memory)
+                if (CrashDump::CreateProcessDump(m_processId, dumpPath))
+                {
+                    Logger::Log("Process dump created: %s", dumpPath.c_str());
+                }
+                else
+                {
+                    Logger::Warning("Could not create process dump - process may have already been cleaned up");
+                }
             }
             
             // Call callback
@@ -202,8 +178,7 @@ namespace DX11Base
                 }
             }
             
-            // Close handle and reset
-            CloseHandle(m_processHandle);
+            // Reset handle (but don't close GetCurrentProcess() handle)
             m_processHandle = nullptr;
             m_processId = 0;
         }

@@ -17,7 +17,7 @@
 
 Noclip::Noclip() {
     m_memory = std::make_unique<Utils::SafeMemory>();
-    if (!m_memory->AttachToProcess("PlanetSide2_x64.exe")) {
+    if (!m_memory->AttachToProcess()) {
         Logger::Error("Noclip: Failed to attach to process");
     }
     

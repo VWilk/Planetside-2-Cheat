@@ -27,7 +27,7 @@ bool Game::Initialize() {
     m_memory = std::make_unique<Utils::SafeMemory>();
     Logger::Log("Game::Initialize: SafeMemory object created.");
     
-    if (!m_memory->AttachToProcess("PlanetSide2_x64.exe")) {
+    if (!m_memory->AttachToProcess()) {
         Logger::Error("Game::Initialize: Failed to attach to process.");
         return false;
     }

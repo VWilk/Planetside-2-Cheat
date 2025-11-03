@@ -9,6 +9,8 @@
 #include <vector>
 #include <immintrin.h>  // For _mm_crc32_u64 and _mm_crc32_u8
 #include <sstream>
+#include <thread>
+#include <chrono>
 
 namespace Utils
 {
@@ -25,37 +27,105 @@ namespace Utils
     {
         DetachFromProcess();
         
+        // processName parameter is ignored - we use GetCurrentProcess() since we're injected
         Logger::Log("DLL is already injected into the process, using current process handle");
         
-        // Since we're injected into the process, we can use the current process
-        m_processHandle = GetCurrentProcess();
-        m_processId = GetCurrentProcessId();
-        
-        // Get the base address of the main module (PlanetSide2_x64.exe)
-        HMODULE hMods[1024];
-        DWORD cbNeeded;
-        if (EnumProcessModules(m_processHandle, hMods, sizeof(hMods), &cbNeeded))
-        {
-            MODULEINFO mi;
-            if (GetModuleInformation(m_processHandle, hMods[0], &mi, sizeof(mi)))
-            {
-                m_baseAddress = (uintptr_t)mi.lpBaseOfDll;
+        try {
+            // Since we're injected into the process, we can use the current process
+            m_processHandle = GetCurrentProcess();
+            m_processId = GetCurrentProcessId();
+            
+            // Method 1: Try fast method first - GetModuleHandle(nullptr) gets main module base
+            // This is much faster than EnumProcessModules and works on all Windows versions
+            HMODULE hMainModule = GetModuleHandleA(nullptr);
+            if (hMainModule) {
+                m_baseAddress = (uintptr_t)hMainModule;
                 m_isAttached = true;
-                Logger::Log("Successfully initialized memory access");
+                Logger::Log("Successfully initialized memory access (fast method)");
                 char buffer[256];
                 snprintf(buffer, sizeof(buffer), "Base address: 0x%llX", (unsigned long long)m_baseAddress);
                 Logger::Log(buffer);
                 return true;
             }
+            
+            // Method 2: Fallback to EnumProcessModules if GetModuleHandle fails
+            // Add a small delay for slower systems
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            
+            HMODULE hMods[1024];
+            DWORD cbNeeded;
+            
+            // Try with timeout - for very slow systems, this might take a while
+            auto startTime = std::chrono::steady_clock::now();
+            const auto timeout = std::chrono::seconds(5); // 5 second timeout
+            
+            bool enumSuccess = false;
+            while (std::chrono::steady_clock::now() - startTime < timeout) {
+                enumSuccess = EnumProcessModules(m_processHandle, hMods, sizeof(hMods), &cbNeeded) != 0;
+                if (enumSuccess) break;
+                
+                // If failed, wait a bit and retry (might be system load issue)
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+            
+            if (enumSuccess && cbNeeded > 0) {
+                MODULEINFO mi;
+                if (GetModuleInformation(m_processHandle, hMods[0], &mi, sizeof(mi)))
+                {
+                    m_baseAddress = (uintptr_t)mi.lpBaseOfDll;
+                    m_isAttached = true;
+                    Logger::Log("Successfully initialized memory access (EnumProcessModules method)");
+                    char buffer[256];
+                    snprintf(buffer, sizeof(buffer), "Base address: 0x%llX", (unsigned long long)m_baseAddress);
+                    Logger::Log(buffer);
+                    return true;
+                }
+                else
+                {
+                    DWORD error = GetLastError();
+                    Logger::Warning("GetModuleInformation failed. Error: %d, trying alternative...", error);
+                }
+            }
             else
             {
-                Logger::Error("GetModuleInformation failed. Error: %d", GetLastError());
-                return false;
+                DWORD error = GetLastError();
+                Logger::Warning("EnumProcessModules failed or timed out. Error: %d, trying alternative...", error);
             }
+            
+            // Method 3: Last resort - try GetModuleHandle with executable name
+            // Sometimes this works when other methods fail
+            char exePath[MAX_PATH] = {0};
+            if (GetModuleFileNameA(nullptr, exePath, MAX_PATH)) {
+                char* exeName = strrchr(exePath, '\\');
+                if (exeName) exeName++; else exeName = exePath;
+                
+                HMODULE hExeModule = GetModuleHandleA(exeName);
+                if (hExeModule) {
+                    m_baseAddress = (uintptr_t)hExeModule;
+                    m_isAttached = true;
+                    Logger::Log("Successfully initialized memory access (executable name method)");
+                    char buffer[256];
+                    snprintf(buffer, sizeof(buffer), "Base address: 0x%llX", (unsigned long long)m_baseAddress);
+                    Logger::Log(buffer);
+                    return true;
+                }
+            }
+            
+            // All methods failed
+            Logger::Error("All methods to get base address failed. Memory access may not work correctly.");
+            // Still mark as attached with base address 0 - might work for some operations
+            m_isAttached = true;
+            m_baseAddress = 0;
+            return false;
         }
-        else // If EnumProcessModules fails
-        {
-            Logger::Error("EnumProcessModules failed. Error: %d", GetLastError()); // More details!
+        catch (const std::exception& e) {
+            Logger::Error("Exception in AttachToProcess: %s", e.what());
+            m_isAttached = false;
+            return false;
+        }
+        catch (...) {
+            Logger::Error("Unknown exception in AttachToProcess");
+            m_isAttached = false;
             return false;
         }
     }
