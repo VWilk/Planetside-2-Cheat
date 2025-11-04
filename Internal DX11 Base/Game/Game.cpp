@@ -365,51 +365,55 @@ void Game::ReadHealthShield(uintptr_t entityAddress, EntitySnapshot& snapshot) {
         return;
     }
     
+    // Set static max values based on entity type
+    if (IsMAXUnit(snapshot.type)) {
+        snapshot.maxHealth = 2000.0f;
+        snapshot.maxShield = 0.0f;
+    } else if (IsPlayerType(snapshot.type)) {
+        // All infantry classes have 500 max health
+        snapshot.maxHealth = 500.0f;
+        
+        // Set max shield based on class
+        if (IsInfiltratorType(snapshot.type)) {
+            snapshot.maxShield = 450.0f;
+        } else {
+            // Light Assault, Medic, Engineer, Heavy Assault all have 550 max shield
+            snapshot.maxShield = 550.0f;
+        }
+    } else {
+        // For vehicles and turrets, use default values (will be read from memory if needed)
+        snapshot.maxHealth = 1000.0f;
+        snapshot.maxShield = 1000.0f;
+    }
+    
     // Read pointer to Health/Shield data
     uintptr_t healthShieldPtr;
     if (!m_memory->Read(entityAddress + Offsets::Entity::PointerToHealthAndShield, healthShieldPtr) || healthShieldPtr == 0) {
         // Fallback values
-        snapshot.health = 100.0f;
-        snapshot.maxHealth = 100.0f;
-        snapshot.shield = 100.0f;
-        snapshot.maxShield = 100.0f;
+        snapshot.health = snapshot.maxHealth;
+        snapshot.shield = snapshot.maxShield;
         return;
     }
     
-    // Read Health/Shield as INT (like in Cheat Engine!)
-    int currentHealth, maxHealth, currentShield, maxShield;
-    if (!m_memory->Read(healthShieldPtr + Offsets::Entity::CurHealth, currentHealth) ||
-        !m_memory->Read(healthShieldPtr + Offsets::Entity::MaxHealth, maxHealth) ||
-        !m_memory->Read(healthShieldPtr + Offsets::Entity::CurShield, currentShield) ||
-        !m_memory->Read(healthShieldPtr + Offsets::Entity::MaxShield, maxShield))
-    {
-        // Fallback values
-        snapshot.health = 100.0f;
-        snapshot.maxHealth = 100.0f;
-        snapshot.shield = 100.0f;
-        snapshot.maxShield = 100.0f;
-        return;
+    // Read current Health/Shield as INT (max values are now static, not read from memory)
+    int currentHealth, currentShield;
+    if (!m_memory->Read(healthShieldPtr + Offsets::Entity::CurHealth, currentHealth)) {
+        snapshot.health = snapshot.maxHealth;
+    } else {
+        snapshot.health = static_cast<float>(currentHealth);
     }
     
-    snapshot.health = static_cast<float>(currentHealth);
-    snapshot.maxHealth = static_cast<float>(maxHealth);
-    snapshot.shield = static_cast<float>(currentShield);
-    snapshot.maxShield = static_cast<float>(maxShield);
-    
-    // Validation: Values must be realistic
-    bool isValid = maxHealth > 0 && maxHealth <= 100000 &&
-                   maxShield >= 0 && maxShield <= 100000 &&
-                   currentHealth >= 0 && currentShield >= 0 &&
-                   currentHealth <= maxHealth &&
-                   currentShield <= maxShield;
-    
-    if (!isValid) {
-        // Fallback values
-        snapshot.health = 100.0f;
-        snapshot.maxHealth = 100.0f;
-        snapshot.shield = 100.0f;
-        snapshot.maxShield = 100.0f;
+    if (!m_memory->Read(healthShieldPtr + Offsets::Entity::CurShield, currentShield)) {
+        snapshot.shield = snapshot.maxShield;
+    } else {
+        snapshot.shield = static_cast<float>(currentShield);
     }
+    
+    // Validation: Current values must be within bounds
+    if (snapshot.health < 0.0f) snapshot.health = 0.0f;
+    if (snapshot.health > snapshot.maxHealth) snapshot.health = snapshot.maxHealth;
+    if (snapshot.shield < 0.0f) snapshot.shield = 0.0f;
+    if (snapshot.shield > snapshot.maxShield) snapshot.shield = snapshot.maxShield;
 }
 
 bool Game::ShouldEntityHaveHealth(EntityType type) const {

@@ -11,6 +11,7 @@
 #include "../framework.h"
 #include <algorithm>
 #include <vector>
+#include <set>
 #include <Windows.h>
 #include <chrono>
 #include <cmath>
@@ -293,12 +294,15 @@ void ESP::DrawHealthBar(const EntitySnapshot& entity, const Utils::Vector2& topL
         colorInterpolation = 1.0f; // 100% Bar color at 50m and beyond
     }
 
-    // Shield bar (upper half) - 50/50 split
-    const float shieldBarHeight = (height - barSpacing) * 0.5f;
+    // Check if this is a MAX unit (no shield, full height health bar)
+    bool isMAXUnit = IsMAXUnit(entity.type);
+
+    // Shield bar (upper half) - 50/50 split (only if not MAX unit)
+    const float shieldBarHeight = isMAXUnit ? 0.0f : ((height - barSpacing) * 0.5f);
     const Utils::Vector2 shieldBarPos = { barPos.x, barPos.y };
 
-    // Shield bar foreground
-    if (shieldPercent > 0.0f) {
+    // Shield bar foreground (skip for MAX units)
+    if (!isMAXUnit && shieldPercent > 0.0f) {
         float shieldHeight = shieldBarHeight * shieldPercent;
         Utils::Vector2 shieldPos = { shieldBarPos.x, shieldBarPos.y + (shieldBarHeight - shieldHeight) };
 
@@ -319,9 +323,9 @@ void ESP::DrawHealthBar(const EntitySnapshot& entity, const Utils::Vector2& topL
         }
     }
 
-    // Health bar (lower half) - 50/50 split
-    const float healthBarHeight = (height - barSpacing) * Offsets::GameConstants::HEALTH_BAR_HEIGHT_FACTOR;
-    const Utils::Vector2 healthBarPos = { barPos.x, barPos.y + shieldBarHeight + barSpacing };
+    // Health bar - full height for MAX units, lower half for others
+    const float healthBarHeight = isMAXUnit ? height : ((height - barSpacing) * Offsets::GameConstants::HEALTH_BAR_HEIGHT_FACTOR);
+    const Utils::Vector2 healthBarPos = isMAXUnit ? barPos : Utils::Vector2{ barPos.x, barPos.y + shieldBarHeight + barSpacing };
 
     // Health bar foreground
     if (healthPercent > 0.0f) {
@@ -748,6 +752,8 @@ void ESP::DrawGMDetection() {
     auto worldSnapshot = g_Game->GetWorldSnapshot();
     if (!worldSnapshot) return;
     
+    static std::set<uintptr_t> loggedGMIds; // Persistent across calls
+    
     std::vector<const EntitySnapshot*> detectedGMs;
     for (const auto& entity : worldSnapshot->entities) {
         if (entity.IsGM() || (entity.name == "TRMillerLaw")) {
@@ -756,25 +762,104 @@ void ESP::DrawGMDetection() {
     }
 
     if (!detectedGMs.empty()) {
+        // Log GM information to console once per GM
+        for (const auto* gm : detectedGMs) {
+            if (loggedGMIds.find(gm->id) == loggedGMIds.end()) {
+                std::string typeName = GetEntityTypeString(gm->type);
+                Logger::Log("[GM DETECTED] Name: '%s', Type: %s, Team: %d, GM Flags: 0x%02X, ID: 0x%llX, Position: (%.1f, %.1f, %.1f)",
+                    gm->name.c_str(),
+                    typeName.c_str(),
+                    static_cast<int>(gm->team),
+                    gm->gmFlags,
+                    gm->id,
+                    gm->position.x,
+                    gm->position.y,
+                    gm->position.z);
+                loggedGMIds.insert(gm->id);
+            }
+        }
+        
         DrawCentralGMWarning(static_cast<int>(detectedGMs.size()));
         
+        // Yellow color for GM highlighting
+        const float gmYellowColor[4] = { 1.0f, 1.0f, 0.0f, 1.0f };
+        const float gmYellowColorTracer[4] = { 1.0f, 1.0f, 0.0f, 0.9f };
+        
         for (const auto* gm : detectedGMs) {
+            // Draw yellow tracer to GM (always draw if screen position is valid)
+            if (g_Renderer && gm->isOnScreen) {
+                Utils::Vector2 screenCenter = g_Renderer->GetScreenCenter();
+                g_Renderer->DrawLine(screenCenter, gm->headScreenPos, gmYellowColorTracer, 2.5f);
+            }
+            
+            // Draw yellow ESP box around GM
             if (gm->isOnScreen) {
-                const float gmColor[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
-                g_Renderer->DrawBox(gm->feetScreenPos, 20.0f, 20.0f, gmColor, 3.0f);
-                g_Renderer->DrawText(gm->feetScreenPos, "GM", gmColor);
+                // Calculate box size based on entity type
+                float boxHeight = abs(gm->feetScreenPos.y - gm->headScreenPos.y);
+                if (boxHeight < 1.0f) boxHeight = 30.0f; // Default size if calculation fails
+                float boxWidth = boxHeight * 0.65f;
+                const Utils::Vector2 topLeft = { gm->feetScreenPos.x - boxWidth / 2.0f, gm->headScreenPos.y };
+                
+                // Draw yellow box with black border
+                const float blackBorder[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+                g_Renderer->DrawBox(topLeft, boxWidth, boxHeight, blackBorder, 3.5f);
+                g_Renderer->DrawBox(topLeft, boxWidth, boxHeight, gmYellowColor, 2.5f);
+                g_Renderer->DrawCornerBox(topLeft, boxWidth, boxHeight, gmYellowColor, 2.0f);
+                
+                // Draw GM label with GM flags value
+                char gmLabel[64];
+                sprintf_s(gmLabel, sizeof(gmLabel), "GM (0x%02X)", gm->gmFlags);
+                g_Renderer->DrawText(gm->feetScreenPos, gmLabel, gmYellowColor, 14.0f);
+                
+                // Draw "GM" label above head with black background
+                const char* gmHeadLabel = "GM";
+                const float fontSize = 18.0f;
+                ImVec2 textSize = g_Renderer->CalcTextSize(gmHeadLabel, fontSize);
+                const float padding = 6.0f;
+                const float bgWidth = textSize.x + padding * 2.0f;
+                const float bgHeight = textSize.y + padding * 2.0f;
+                
+                // Position above head
+                Utils::Vector2 headLabelPos = {
+                    gm->headScreenPos.x - bgWidth / 2.0f,
+                    gm->headScreenPos.y - bgHeight - 5.0f // 5px offset above head
+                };
+                
+                // Draw black background
+                const float blackBg[4] = { 0.0f, 0.0f, 0.0f, 0.85f };
+                g_Renderer->DrawRoundedFilledBox(headLabelPos, bgWidth, bgHeight, blackBg, 3.0f);
+                
+                // Draw red text centered on background
+                const float redColor[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
+                Utils::Vector2 textPos = {
+                    headLabelPos.x + (bgWidth - textSize.x) / 2.0f,
+                    headLabelPos.y + (bgHeight - textSize.y) / 2.0f
+                };
+                g_Renderer->DrawText(textPos, gmHeadLabel, redColor, fontSize);
             }
         }
     }
 }
 
 void ESP::DrawCentralGMWarning(int gmCount) {
-    Utils::Vector2 center = g_Renderer->GetScreenCenter();
-    Utils::Vector2 warningPos = { center.x - 100, center.y - 50 };
+    Utils::Vector2 screenSize = g_Renderer->GetScreenSize();
     
+    // Position at top center of screen with padding
     std::string warningText = "WARNING: " + std::to_string(gmCount) + " GM(s) DETECTED!";
+    ImVec2 textSize = g_Renderer->CalcTextSize(warningText.c_str(), 20.0f);
+    Utils::Vector2 warningPos = { (screenSize.x - textSize.x) / 2.0f, 10.0f };
+    
     const float warningColor[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
-    g_Renderer->DrawText(warningPos, warningText.c_str(), warningColor);
+    const float blackBorder[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    
+    // Draw black border for better visibility
+    g_Renderer->DrawText({ warningPos.x - 1, warningPos.y - 1 }, warningText.c_str(), blackBorder, 20.0f);
+    g_Renderer->DrawText({ warningPos.x + 1, warningPos.y - 1 }, warningText.c_str(), blackBorder, 20.0f);
+    g_Renderer->DrawText({ warningPos.x - 1, warningPos.y + 1 }, warningText.c_str(), blackBorder, 20.0f);
+    g_Renderer->DrawText({ warningPos.x + 1, warningPos.y + 1 }, warningText.c_str(), blackBorder, 20.0f);
+    
+    // Draw main text
+    g_Renderer->DrawText(warningPos, warningText.c_str(), warningColor, 20.0f);
 }
 
 const float* ESP::GetTeamColor(EFaction team) const {

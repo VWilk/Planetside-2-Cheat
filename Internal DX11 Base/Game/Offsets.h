@@ -15,12 +15,12 @@
  */
 namespace Offsets {
     // Base Addresses (absolute - relative to BaseAddress)
-    constexpr uintptr_t pCGameAddress = 0x40B7AE0;    ///< Main game manager address
-    constexpr uintptr_t pCGraphics = 0x40B7C50;       ///< Graphics manager address
-    constexpr uintptr_t o_FOV = 0x144260CFC;          ///< Field of view offset
+    constexpr uintptr_t pCGameAddress = 0x4085190;    ///< Main game manager address (g_pCGame)
+    constexpr uintptr_t pCGraphics = 0x4084810;       ///< Graphics manager address (g_pCGraphics)
+    constexpr uintptr_t o_FOV = 0x14422B9B0;          ///< Field of view offset (g_fFOV)
     
     // CGame Offsets
-    constexpr uintptr_t o_cGame_pFirstObject = 0x1060; ///< First entity object pointer
+    constexpr uintptr_t o_cGame_pFirstObject = 0x14d8; ///< First entity object pointer
     constexpr uintptr_t o_pNextObject = 0x5A8;         ///< Next entity object pointer
     
     /**
@@ -28,59 +28,59 @@ namespace Offsets {
      * @details Offsets for accessing entity data structures
      */
     namespace Entity {
-        constexpr uintptr_t Position = 0x920;        ///< Entity position offset
-        constexpr uintptr_t TeamID = 0x1E8;         ///< Team ID offset
-        constexpr uintptr_t Type = 0x5E0;           ///< Entity type offset
-        constexpr uintptr_t PlayerStance = 0x2A04;  ///< Player stance offset
-        constexpr uintptr_t ViewAngle = 0x2C20;     ///< View angle offset
-        constexpr uintptr_t Name = 0x2AF8;          ///< Entity name offset
-        constexpr uintptr_t NameBackup = 0x2B48;    ///< Backup name offset
+        constexpr uintptr_t Position = 0x6b0;        ///< Entity position offset
+        constexpr uintptr_t TeamID = 0x258;         ///< Team ID offset
+        constexpr uintptr_t Type = 0x9b8;           ///< Entity type offset
+        constexpr uintptr_t PlayerStance = 0x2CC8;  ///< Player stance offset
+        constexpr uintptr_t ViewAngle = 0x2BB0;     ///< View angle offset
+        constexpr uintptr_t Name = 0x2D38;          ///< Entity name offset
+        constexpr uintptr_t NameBackup = 0x2D88;    ///< Backup name offset
         
-        // Health/Shield (Pointer indirection!)
-        constexpr uintptr_t PointerToHealthAndShield = 0x120;
-        constexpr uintptr_t CurHealth = 0x160;
-        constexpr uintptr_t MaxHealth = 0x164;
-        constexpr uintptr_t CurShield = 0x470;
-        constexpr uintptr_t MaxShield = 0x474;
+        // Health/Shield (Pointer indirection!) 
+        constexpr uintptr_t PointerToHealthAndShield = 0x108; //Fix
+        constexpr uintptr_t CurHealth = 0x168; //Fix
+        //constexpr uintptr_t MaxHealth = 0x164; //Fix
+        constexpr uintptr_t CurShield = 0x4B0; //Fix
+        //constexpr uintptr_t MaxShield = 0x474; //Fix
         
         // IsDead Check
-        constexpr uintptr_t IsDead = 0x9C1;
+        constexpr uintptr_t IsDead = 0x9E1;
         
         // GM/Admin Flags (based on IDA analysis)
-        constexpr uintptr_t GMFlags = 0x9C4; // 2500 decimal
+        constexpr uintptr_t GMFlags = 0x9E4; // 2500 decimal
         
         // Shooting Status (168 = shooting, 160 = not shooting)
-        constexpr uintptr_t ShootingStatus = 0x3088;
+        constexpr uintptr_t ShootingStatus = 0x30A8;
         
         // NEW: Complete pointer chain for bones
-        constexpr uintptr_t pActor = 0x828;
+        constexpr uintptr_t pActor = 0x5d8; // For Bone-Chain (pACtor is different at +0x428)
         constexpr uintptr_t pSkeleton = 0x1D8;
         constexpr uintptr_t pSkeletonInfo = 0x50;
-        constexpr uintptr_t pBoneInfo = 0x68;
+        constexpr uintptr_t pBoneInfo = 0x8;
         constexpr uintptr_t BoneArrayOffset = 0x194; // Relative to boneInfo pointer
     }
     
     // Camera/ViewMatrix Offsets
     namespace Camera {
-        constexpr uintptr_t ViewMatrixOffset1 = 0xF0; // cGraphicsBase -> cameraPtr
-        constexpr uintptr_t ViewMatrixOffset2 = 0xB0; // cameraPtr -> matrixAddress
+        constexpr uintptr_t ViewMatrixOffset1 = 0x398; // cGraphicsBase -> cameraPtr
+        constexpr uintptr_t ViewMatrixOffset2 = 0x170; // cameraPtr -> matrixAddress
     }
     
     // Entity count offset (for performance optimization)
-    constexpr uintptr_t o_EntityCount = 0x2710;
+    constexpr uintptr_t o_EntityCount = 0x1370;
 }
 
 // Magic Bullet Offsets (directly in Offsets namespace)
 namespace Offsets {
     namespace MagicBullet {
-        static constexpr uintptr_t pCurrentBulletPointerBase = 0x40B82C0;
-        static constexpr int pCurrentBulletPointerOffsets[] = { 0x871E8 };
-        static constexpr int bullet_direction_offset = 0xB40;
-        static constexpr int bullet_position_offset = 0x870;
-        static constexpr int bullet_start_position_offset = 0x930;
+        static constexpr uintptr_t pCurrentBulletPointerBase = 0x4084750;
+        static constexpr int pCurrentBulletPointerOffsets[] = { 0xAB828 };
+        static constexpr int bullet_direction_offset = 0x860;
+        static constexpr int bullet_position_offset = 0x500;
+        static constexpr int bullet_start_position_offset = 0x0B00;
         static constexpr int bullet_is_alive_offset = 0x4;
-        static constexpr int bullet_speed_offset = 0x8C0;
-        static constexpr int o_BulletHash = 0x4F4;  // CRC32 Hash offset
+        static constexpr int bullet_speed_offset = 0x530;
+        static constexpr int o_BulletHash = 0x850;  // CRC32 Hash offset
     }
     
     // Noclip/Flight Offsets - Direct world coordinates as Double
@@ -88,11 +88,11 @@ namespace Offsets {
         // Pointer chain to real world coordinates (Double)
         // Base: "PlanetSide2_x64.exe"+040B84D0
         // Chain: [base+58] -> [result+2A0] -> [result+C00] -> X,Y,Z as Double
-        static constexpr uintptr_t pBaseAddress = 0x04260B60;
+        static constexpr uintptr_t pBaseAddress = 0x422B770;
         static constexpr uintptr_t o_Offset1 = 0x248;
         static constexpr uintptr_t o_Offset2 = 0xE0;
-        static constexpr uintptr_t o_Offset3 = 0x180;
-        static constexpr uintptr_t o_Offset4 = 0x268;
+        static constexpr uintptr_t o_Offset3 = 0x1E0;
+        static constexpr uintptr_t o_Offset4 = 0x1D0;
         static constexpr uintptr_t o_Offset5 = 0x208;
         
         // Relative Offsets for X, Y, Z (8 bytes each for Double)
@@ -103,11 +103,11 @@ namespace Offsets {
         // Velocity Offsets - Pointer chain for Velocity
         // Base: "PlanetSide2_x64.exe"+04024928
         // Chain: [base+5B0] -> [result+3B8] -> X,Y,Z Velocity as Double
-        static constexpr uintptr_t pVelocityBaseAddress = 0x04260B60;
+        static constexpr uintptr_t pVelocityBaseAddress = 0x0422B770;
         static constexpr uintptr_t o_VelocityOffset1 = 0x248;
         static constexpr uintptr_t o_VelocityOffset2 = 0xE0;
         static constexpr uintptr_t o_VelocityOffset3 = 0x180;
-        static constexpr uintptr_t o_VelocityOffset4 = 0x300;
+        static constexpr uintptr_t o_VelocityOffset4 = 0x278;
         
         // Relative Offsets for Velocity X, Y, Z (8 bytes each for Double)
         static constexpr uintptr_t o_VelocityX = 0x0;   // +0

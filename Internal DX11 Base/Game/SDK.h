@@ -278,6 +278,23 @@ inline bool IsMAXUnit(EntityType type) {
 }
 
 /**
+ * @brief Check if entity type is an infiltrator
+ * @param type The entity type to check
+ * @return true if the entity is an infiltrator, false otherwise
+ */
+inline bool IsInfiltratorType(EntityType type) {
+    switch (type) {
+    case EntityType::NC_Infiltrator:
+    case EntityType::TR_Infiltrator:
+    case EntityType::VS_Infiltrator:
+    case EntityType::NS_Infiltrator:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/**
  * @brief Check if entity type is a known/recognized type
  * @param type The entity type to check
  * @return true if the entity type is recognized, false otherwise

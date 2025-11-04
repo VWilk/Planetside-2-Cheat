@@ -448,12 +448,7 @@ namespace DX11Base {
 					
 					ImGui::Separator();
 					ImGui::SliderFloat("Movement Speed", &g_Settings.Noclip.fSpeed, 0.01f, 2.0f, "%.1f");
-					
-					ImGui::Separator();
-					ImGui::TextColored(ImVec4(0,1,0,1), "Direct Memory Access:");
-					ImGui::Text("Reading/Writing Double values directly");
-					ImGui::Text("No coordinate conversion needed!");
-					
+
 					ImGui::Separator();
 					ImGui::Text("Current Position:");
 					if (g_Noclip) {
