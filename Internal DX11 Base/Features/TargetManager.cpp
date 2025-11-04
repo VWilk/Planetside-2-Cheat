@@ -255,7 +255,7 @@ const EntitySnapshot* TargetManager::FindTargetByName(const WorldSnapshot& world
         // For name-based search we use less strict criteria
         if (!entity.isAlive) continue;
         if (entity.type == EntityType::Unknown) continue;
-        if (entity.health <= 0.0f) continue;
+        // Health check removed - allow targeting even with health = 0 or invalid health/shield values
         if (entity.distanceToLocalPlayer > g_Settings.Targeting.fMaxDistance) continue;
         
         // Never target entities with unknown/invalid team
@@ -286,7 +286,7 @@ const EntitySnapshot* TargetManager::FindTargetByName(const WorldSnapshot& world
 bool TargetManager::IsValidTarget(const EntitySnapshot& entity, const LocalPlayerSnapshot& localPlayer) const {
     if (!entity.isAlive) return false;
     if (entity.type == EntityType::Unknown) return false;
-    if (entity.health <= 0.0f) return false;
+    // Health check removed - allow targeting even with health = 0 or invalid health/shield values
     
     // Never target entities with unknown/invalid team
     if (entity.team != EFaction::VS && entity.team != EFaction::NC && 
