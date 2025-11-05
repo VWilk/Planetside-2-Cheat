@@ -3,6 +3,7 @@
 #include "Offsets.h"
 #include "../Utils/Logger.h"
 #include <chrono>
+#include <set>
 #include "../Renderer/Renderer.h"
 
 Game::Game() {
@@ -188,9 +189,13 @@ void Game::ReadEntityList() {
             
             EntitySnapshot snapshot;
             snapshot.id = currentEntityPtr;
+            snapshot.healthShieldPtr = 0; // Initialize to 0
             
             // ===== SCHRITT 1: ROHDATEN LESEN =====
-            snapshot.position = m_memory->ReadVector3(currentEntityPtr + Offsets::Entity::Position);
+            uintptr_t positionptr;
+            if (!m_memory->Read(currentEntityPtr + Offsets::Entity::PositionOffset, positionptr))
+                return;
+            snapshot.position = m_memory->ReadVector3(positionptr + Offsets::Entity::Position);
             
             uint8_t typeValue;
             m_memory->Read(currentEntityPtr + Offsets::Entity::Type, typeValue);
@@ -286,8 +291,12 @@ void Game::ReadLocalPlayer() {
         m_snapshot_back->localPlayer.isValid = false;
         return;
     }
-    
-    m_snapshot_back->localPlayer.position = m_memory->ReadVector3(localPlayerPtr + Offsets::Entity::Position);
+
+    uintptr_t positionptr;
+    if (!m_memory->Read(localPlayerPtr + Offsets::Entity::PositionOffset, positionptr))
+        return;
+
+    m_snapshot_back->localPlayer.position = m_memory->ReadVector3(positionptr + Offsets::Entity::Position);
     m_snapshot_back->localPlayer.eyePosition = m_snapshot_back->localPlayer.position;
     m_snapshot_back->localPlayer.eyePosition.z += Offsets::GameConstants::EYE_HEIGHT_OFFSET;
     m_snapshot_back->localPlayer.viewAngles = m_memory->ReadVector3(localPlayerPtr + Offsets::Entity::ViewAngle);
@@ -387,9 +396,94 @@ void Game::ReadHealthShield(uintptr_t entityAddress, EntitySnapshot& snapshot) {
     }
     
     // Read pointer to Health/Shield data
-    uintptr_t healthShieldPtr;
-    if (!m_memory->Read(entityAddress + Offsets::Entity::PointerToHealthAndShield, healthShieldPtr) || healthShieldPtr == 0) {
-        // Fallback values
+    // NOTE: Since the last update, some entities use offset 0x108, others use 0x120
+    // We try both offsets and use whichever one works (has valid pointer and readable health/shield)
+    // Additional validation: Cross-check with IsDead flag to ensure consistency
+    uintptr_t healthShieldPtr = 0;
+    bool foundValidPtr = false;
+    
+    // Read IsDead flag for validation (IsDead = 128 means alive, != 128 means dead)
+    uint8_t isDeadValue;
+    bool isDeadValid = m_memory->Read(entityAddress + Offsets::Entity::IsDead, isDeadValue);
+    bool isAlive = isDeadValid ? (isDeadValue == 128) : true; // Default to alive if can't read
+
+    // Try offset 0x120 first (newer/primary offset)
+    uintptr_t testPtr120;
+    if (m_memory->Read(entityAddress + 0x120, testPtr120) && testPtr120 != 0) {
+        // Verify we can actually read BOTH health AND shield from this pointer
+        int testHealth, testShield;
+        bool healthValid = m_memory->Read(testPtr120 + Offsets::Entity::CurHealth, testHealth);
+        bool shieldValid = m_memory->Read(testPtr120 + Offsets::Entity::CurShield, testShield);
+        
+        // Both must be readable AND within valid ranges
+        if (healthValid && shieldValid) {
+            bool healthInRange = (testHealth >= 0 && testHealth <= static_cast<int>(snapshot.maxHealth));
+            // For MAX units, shield should be 0; for others, it should be in valid range
+            bool shieldInRange = IsMAXUnit(snapshot.type) 
+                ? (testShield == 0) 
+                : (testShield >= 0 && testShield <= static_cast<int>(snapshot.maxShield));
+            
+            // CRITICAL: Cross-validate with IsDead flag
+            // If entity is alive but health is 0, it's wrong
+            // If entity is dead but health > 0, it's wrong
+            bool healthMatchesAliveStatus = true;
+            if (isDeadValid) {
+                if (isAlive && testHealth == 0) {
+                    healthMatchesAliveStatus = false; // Entity alive but health 0 = wrong pointer
+                } else if (!isAlive && testHealth > 0) {
+                    healthMatchesAliveStatus = false; // Entity dead but health > 0 = wrong pointer
+                }
+            }
+            
+            if (healthInRange && shieldInRange && healthMatchesAliveStatus) {
+                healthShieldPtr = testPtr120;
+                foundValidPtr = true;
+            }
+        }
+    }
+    
+    // If 0x120 didn't work, try 0x108 (fallback/alternative offset)
+    if (!foundValidPtr) {
+        uintptr_t testPtr108;
+        if (m_memory->Read(entityAddress + 0x108, testPtr108) && testPtr108 != 0) {
+            // Verify we can actually read BOTH health AND shield from this pointer
+            int testHealth, testShield;
+            bool healthValid = m_memory->Read(testPtr108 + Offsets::Entity::CurHealth, testHealth);
+            bool shieldValid = m_memory->Read(testPtr108 + Offsets::Entity::CurShield, testShield);
+
+            // Both must be readable AND within valid ranges
+            if (healthValid && shieldValid) {
+                bool healthInRange = (testHealth >= 0 && testHealth <= static_cast<int>(snapshot.maxHealth));
+                // For MAX units, shield should be 0; for others, it should be in valid range
+                bool shieldInRange = IsMAXUnit(snapshot.type)
+                    ? (testShield == 0)
+                    : (testShield >= 0 && testShield <= static_cast<int>(snapshot.maxShield));
+
+                // CRITICAL: Cross-validate with IsDead flag
+                // If entity is alive but health is 0, it's wrong
+                // If entity is dead but health > 0, it's wrong
+                bool healthMatchesAliveStatus = true;
+                if (isDeadValid) {
+                    if (isAlive && testHealth == 0) {
+                        healthMatchesAliveStatus = false; // Entity alive but health 0 = wrong pointer
+                    } else if (!isAlive && testHealth > 0) {
+                        healthMatchesAliveStatus = false; // Entity dead but health > 0 = wrong pointer
+                    }
+                }
+
+                if (healthInRange && shieldInRange && healthMatchesAliveStatus) {
+                    healthShieldPtr = testPtr108;
+                    foundValidPtr = true;
+                }
+            }
+        }
+    }
+    
+    // Store healthShieldPtr for debugging (even if invalid)
+    snapshot.healthShieldPtr = healthShieldPtr;
+    
+    // If neither offset worked, use fallback values
+    if (!foundValidPtr || healthShieldPtr == 0) {
         snapshot.health = snapshot.maxHealth;
         snapshot.shield = snapshot.maxShield;
         return;

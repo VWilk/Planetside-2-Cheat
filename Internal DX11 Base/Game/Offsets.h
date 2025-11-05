@@ -28,7 +28,8 @@ namespace Offsets {
      * @details Offsets for accessing entity data structures
      */
     namespace Entity {
-        constexpr uintptr_t Position = 0x6b0;        ///< Entity position offset
+        constexpr uintptr_t PositionOffset = 0x3A0;        ///< Entity position offset
+        constexpr uintptr_t Position = 0x130;        ///< Entity position offset
         constexpr uintptr_t TeamID = 0x258;         ///< Team ID offset
         constexpr uintptr_t Type = 0x9b8;           ///< Entity type offset
         constexpr uintptr_t PlayerStance = 0x2CC8;  ///< Player stance offset
@@ -103,10 +104,10 @@ namespace Offsets {
         // Velocity Offsets - Pointer chain for Velocity
         // Base: "PlanetSide2_x64.exe"+04024928
         // Chain: [base+5B0] -> [result+3B8] -> X,Y,Z Velocity as Double
-        static constexpr uintptr_t pVelocityBaseAddress = 0x0422B770;
+        static constexpr uintptr_t pVelocityBaseAddress = 0x422B770;
         static constexpr uintptr_t o_VelocityOffset1 = 0x248;
         static constexpr uintptr_t o_VelocityOffset2 = 0xE0;
-        static constexpr uintptr_t o_VelocityOffset3 = 0x180;
+        static constexpr uintptr_t o_VelocityOffset3 = 0x1E0;
         static constexpr uintptr_t o_VelocityOffset4 = 0x278;
         
         // Relative Offsets for Velocity X, Y, Z (8 bytes each for Double)

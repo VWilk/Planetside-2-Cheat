@@ -39,6 +39,7 @@ struct EntitySnapshot {
     float shield;                ///< Current shield
     float maxShield;             ///< Maximum shield
     uint8_t gmFlags;             ///< Game master flags
+    uintptr_t healthShieldPtr;   ///< Pointer to Health/Shield data (for debugging)
     
     // ===== Pre-calculated Data (Performance Boost!) =====
     Utils::Vector2 feetScreenPos;        ///< Screen position of feet

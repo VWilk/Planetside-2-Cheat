@@ -491,7 +491,7 @@ void ESP::DrawInfoLabel(const EntitySnapshot& entity, float alphaMultiplier, con
         // For non-players (vehicles, turrets, others), show type in first line if names are disabled
         // This is handled in the first line logic above
     }
-
+    
     // 2. Calculate text dimensions using the Renderer's precise CalcTextSize function
     const float fontSize = isTarget ? 15.0f : 13.0f;
     const float typeFontSize = fontSize * 0.9f;
@@ -561,6 +561,7 @@ void ESP::DrawInfoLabel(const EntitySnapshot& entity, float alphaMultiplier, con
                 currentY
             };
             g_Renderer->DrawText(secondaryPos, line2, targetTextColor, typeFontSize);
+            currentY += secondarySize.y + lineSpacing;
         }
     }
     else {
@@ -589,6 +590,7 @@ void ESP::DrawInfoLabel(const EntitySnapshot& entity, float alphaMultiplier, con
             g_Renderer->DrawText({ secondaryPos.x - 1, secondaryPos.y + 1 }, line2, blackBorder, typeFontSize);
             g_Renderer->DrawText({ secondaryPos.x + 1, secondaryPos.y + 1 }, line2, blackBorder, typeFontSize);
             g_Renderer->DrawText(secondaryPos, line2, whiteText, typeFontSize);
+            currentY += secondarySize.y + lineSpacing;
         }
     }
 }
